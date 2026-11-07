@@ -1,8 +1,8 @@
-
 import logging
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
@@ -94,3 +94,29 @@ async def upload_prescription(
         )
 
     return prescription
+
+
+@router.get(
+    "/my",
+    response_model=list[PrescriptionUploadResponse],
+)
+def get_my_prescriptions(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role != "customer":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only customers can view their prescriptions.",
+        )
+
+    statement = (
+        select(Prescription)
+        .where(Prescription.customer_id == current_user.id)
+        .order_by(
+            Prescription.created_at.desc(),
+            Prescription.id.desc(),
+        )
+    )
+
+    return db.scalars(statement).all()

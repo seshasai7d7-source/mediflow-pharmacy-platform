@@ -1,3 +1,5 @@
+import secrets
+from app.core.config import get_settings
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -107,3 +109,61 @@ def get_my_profile(
     current_user: User = Depends(get_current_user),
 ):
     return current_user
+
+@router.post("/dev-login", response_model=TokenResponse)
+def development_login(
+    db: Session = Depends(get_db),
+):
+    settings = get_settings()
+
+    # Never allow development login outside development mode.
+    if (
+        settings.app_env.lower() != "development"
+        or not settings.enable_dev_auth
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Not found",
+        )
+
+    demo_email = "demo.customer@example.com"
+
+    demo_user = db.scalar(
+        select(User).where(
+            User.email.in_([
+                demo_email,
+                "demo.customer@mediflow.local"
+            ])
+        )
+    )
+
+    if demo_user is not None and demo_user.email != demo_email:
+        demo_user.email = demo_email
+        db.commit()
+        db.refresh(demo_user)
+
+    if demo_user is None:
+        demo_user = User(
+            full_name="MediFlow Demo Customer",
+            email=demo_email,
+            phone=None,
+            password_hash=hash_password(secrets.token_urlsafe(32)),
+            role="customer",
+            is_active=True,
+        )
+
+        db.add(demo_user)
+        db.commit()
+        db.refresh(demo_user)
+
+    if not demo_user.is_active or demo_user.role != "customer":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Development customer account is unavailable.",
+        )
+
+    return TokenResponse(
+        access_token=create_access_token(demo_user.id),
+        token_type="bearer",
+        expires_in=settings.access_token_expire_minutes * 60,
+    )

@@ -6,6 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     app_name: str = "MediFlow API"
     app_env: str = "development"
+    enable_dev_auth: bool = False
     api_v1_prefix: str = "/api/v1"
     database_url: str
     frontend_origins: str = "http://localhost:5173"
