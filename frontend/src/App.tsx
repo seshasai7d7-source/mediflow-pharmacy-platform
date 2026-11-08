@@ -20,6 +20,8 @@ import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import DashboardPage from "./pages/DashboardPage";
 import MyPrescriptionsPage from "./pages/MyPrescriptionsPage";
+import PharmacistQueuePage from "./pages/PharmacistQueuePage";
+import PharmacistReviewPage from "./pages/PharmacistReviewPage";
 
 const API_BASE_URL = (
   import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000"
@@ -206,6 +208,17 @@ export default function App() {
           element={<MyPrescriptionsPage />}
         />
       </Route>
+
+      <Route element={<ProtectedRoute allowedRoles={["pharmacist"]} />}>
+        <Route
+          path="/pharmacist/prescriptions"
+          element={<PharmacistQueuePage />}
+      />
+        <Route
+          path="/pharmacist/prescriptions/:id"
+          element={<PharmacistReviewPage />}
+        />
+       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

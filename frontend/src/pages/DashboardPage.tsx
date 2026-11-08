@@ -59,6 +59,7 @@ export default function DashboardPage() {
             title: "Prescription Queue",
             description: "Review prescriptions submitted by customers.",
             icon: ClipboardList,
+            link: "/pharmacist/prescriptions",
           },
           {
             title: "Order Management",

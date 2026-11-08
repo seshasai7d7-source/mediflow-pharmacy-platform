@@ -24,6 +24,31 @@ from app.schemas.pharmacist import (
 router = APIRouter(prefix="/pharmacist", tags=["Pharmacist"])
 
 
+@router.get("/medicines")
+def get_active_medicines(
+    current_user: User = Depends(require_roles("pharmacist")),
+    db: Session = Depends(get_db),
+):
+    medicines = db.scalars(
+        select(Medicine)
+        .where(Medicine.is_active.is_(True))
+        .order_by(Medicine.name.asc())
+    ).all()
+
+    return [
+        {
+            "id": medicine.id,
+            "name": medicine.name,
+            "generic_name": medicine.generic_name,
+            "brand_name": medicine.brand_name,
+            "strength": medicine.strength,
+            "dosage_form": medicine.dosage_form,
+            "schedule_category": medicine.schedule_category,
+            "requires_prescription": medicine.requires_prescription,
+        }
+        for medicine in medicines
+    ]
+
 @router.get(
     "/prescriptions/queue",
     response_model=list[PrescriptionQueueItem],
