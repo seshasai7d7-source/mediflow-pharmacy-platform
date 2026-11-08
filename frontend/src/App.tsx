@@ -20,6 +20,7 @@ import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import DashboardPage from "./pages/DashboardPage";
 import MyPrescriptionsPage from "./pages/MyPrescriptionsPage";
+import MyOrdersPage from "./pages/MyOrdersPage";
 import PharmacistQueuePage from "./pages/PharmacistQueuePage";
 import PharmacistReviewPage from "./pages/PharmacistReviewPage";
 
@@ -207,18 +208,22 @@ export default function App() {
           path="/prescriptions"
           element={<MyPrescriptionsPage />}
         />
+        <Route
+          path="/orders"
+          element={<MyOrdersPage />}
+        />
       </Route>
 
       <Route element={<ProtectedRoute allowedRoles={["pharmacist"]} />}>
         <Route
           path="/pharmacist/prescriptions"
           element={<PharmacistQueuePage />}
-      />
+        />
         <Route
           path="/pharmacist/prescriptions/:id"
           element={<PharmacistReviewPage />}
         />
-       </Route>
+      </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

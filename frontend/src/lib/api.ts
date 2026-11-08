@@ -271,3 +271,52 @@ export const pharmacistApi = {
     );
   },
 };
+export interface OrderItemResponse {
+  id: number;
+  medicine_id: number;
+  quantity: number;
+  unit_price: number;
+}
+
+export interface OrderResponse {
+  id: number;
+  order_number: string;
+  customer_id: number;
+  store_id: number | null;
+  prescription_id: number | null;
+  status:
+    | "pending_review"
+    | "confirmed"
+    | "preparing"
+    | "ready"
+    | "dispatched"
+    | "delivered"
+    | "cancelled";
+  total_amount: number;
+  created_at: string;
+  items: OrderItemResponse[];
+}
+export interface OrderCreatePayload {
+  prescription_id: number;
+  customer_latitude?: number;
+  customer_longitude?: number;
+}
+
+export const orderApi = {
+  async createOrder(
+    payload: OrderCreatePayload,
+  ): Promise<OrderResponse> {
+    return request<OrderResponse>("/orders", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async getMyOrders(): Promise<OrderResponse[]> {
+    return request<OrderResponse[]>("/orders");
+  },
+
+  async getOrder(orderId: number): Promise<OrderResponse> {
+    return request<OrderResponse>(`/orders/${orderId}`);
+  },
+};

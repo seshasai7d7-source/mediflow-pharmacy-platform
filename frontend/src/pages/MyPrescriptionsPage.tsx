@@ -10,10 +10,12 @@ import {
   CheckCircle,
   XCircle,
   AlertCircle,
+  ShoppingCart,
 } from "lucide-react";
 
 import {
   prescriptionApi,
+  orderApi,
   ApiError,
   type Prescription,
   type PrescriptionStatus,
@@ -57,6 +59,8 @@ export default function MyPrescriptionsPage() {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [orderingPrescriptionId, setOrderingPrescriptionId] =
+    useState<number | null>(null);
 
   async function loadPrescriptions() {
     setLoading(true);
@@ -130,6 +134,62 @@ export default function MyPrescriptionsPage() {
       );
     } finally {
       setUploading(false);
+    }
+  }
+
+  async function handleCreateOrder(prescriptionId: number) {
+    setError("");
+    setSuccess("");
+    setOrderingPrescriptionId(prescriptionId);
+
+    let usedLocation = false;
+
+    const payload: {
+      prescription_id: number;
+      customer_latitude?: number;
+      customer_longitude?: number;
+    } = {
+      prescription_id: prescriptionId,
+    };
+
+    try {
+      if ("geolocation" in navigator) {
+        try {
+          const position = await new Promise<GeolocationPosition>(
+            (resolve, reject) => {
+              navigator.geolocation.getCurrentPosition(resolve, reject, {
+                enableHighAccuracy: false,
+                timeout: 10000,
+                maximumAge: 60000,
+              });
+            },
+          );
+
+          payload.customer_latitude = position.coords.latitude;
+          payload.customer_longitude = position.coords.longitude;
+          usedLocation = true;
+        } catch {
+          // Location unavailable; continue with default store selection.
+        }
+      }
+
+      const order = await orderApi.createOrder(payload);
+
+      setSuccess(
+        `Order ${order.order_number} created successfully. ${
+          usedLocation
+            ? "Nearest eligible store selected."
+            : "Default store selection used because location was unavailable."
+        } Store ID: ${order.store_id ?? "Not assigned"}.`,
+      );
+    } catch (err) {
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : "Unable to place your order.",
+      );
+    } finally {
+      setOrderingPrescriptionId(null);
     }
   }
 
@@ -256,6 +316,8 @@ export default function MyPrescriptionsPage() {
               {prescriptions.map((prescription) => {
                 const config = statusConfig[prescription.status];
                 const StatusIcon = config.icon;
+                const isOrdering =
+                  orderingPrescriptionId === prescription.id;
 
                 return (
                   <article
@@ -293,6 +355,27 @@ export default function MyPrescriptionsPage() {
                         {config.label}
                       </span>
                     </div>
+
+                    {prescription.status === "approved" && (
+                      <div className="mt-4 border-t border-slate-100 pt-4">
+                        <p className="mb-3 text-sm text-slate-600">
+                          Your prescription has been approved by a pharmacist.
+                          You can now place an order.
+                        </p>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleCreateOrder(prescription.id)
+                          }
+                          disabled={orderingPrescriptionId !== null}
+                          className="inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <ShoppingCart size={17} />
+                          {isOrdering ? "Placing order..." : "Place order"}
+                        </button>
+                      </div>
+                    )}
                   </article>
                 );
               })}

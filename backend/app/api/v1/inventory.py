@@ -66,18 +66,40 @@ def route_to_available_store(
     current_user: User = Depends(require_roles("customer")),
 ):
     try:
-        stores = find_available_stores(
+        customer_latitude = getattr(request, "customer_latitude", None)
+        customer_longitude = getattr(request, "customer_longitude", None)
+
+        # Preserve compatibility when customer coordinates are not provided.
+        if customer_latitude is None and customer_longitude is None:
+            return find_available_stores(
+                db,
+                request.medicine_id,
+                request.quantity,
+            )
+
+        return find_available_stores(
             db=db,
             medicine_id=request.medicine_id,
             quantity=request.quantity,
-        )
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(exc),
+            customer_latitude=customer_latitude,
+            customer_longitude=customer_longitude,
         )
 
-    return stores
+    except ValueError as exc:
+        message = str(exc)
+
+        if message in (
+            "Medicine not found.",
+            "Medicine not found or inactive.",
+        ):
+            error_status = status.HTTP_404_NOT_FOUND
+        else:
+            error_status = status.HTTP_400_BAD_REQUEST
+
+        raise HTTPException(
+            status_code=error_status,
+            detail=message,
+        ) from exc
 
 
 @router.post("/reserve")

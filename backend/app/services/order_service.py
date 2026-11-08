@@ -14,16 +14,31 @@ from app.models import (
     PrescriptionItem,
     Store,
 )
+from app.services.inventory_service import calculate_distance_km
 
 
 def create_order_from_prescription(
     db: Session,
     customer_id: int,
     prescription_id: int,
+    customer_latitude: float | None = None,
+    customer_longitude: float | None = None,
 ) -> dict:
-    """Create an order using only pharmacist-approved prescription items."""
+    """Create an order using approved items from the nearest eligible store."""
 
     try:
+        # Validate coordinates when supplied.
+        if (customer_latitude is None) != (customer_longitude is None):
+            raise ValueError(
+                "Both customer latitude and longitude must be provided together."
+            )
+
+        if customer_latitude is not None and not -90 <= customer_latitude <= 90:
+            raise ValueError("Customer latitude must be between -90 and 90.")
+
+        if customer_longitude is not None and not -180 <= customer_longitude <= 180:
+            raise ValueError("Customer longitude must be between -180 and 180.")
+
         prescription = db.scalar(
             select(Prescription)
             .where(
@@ -47,7 +62,9 @@ def create_order_from_prescription(
         )
 
         if existing_order:
-            raise ValueError("An active order already exists for this prescription.")
+            raise ValueError(
+                "An active order already exists for this prescription."
+            )
 
         items = db.scalars(
             select(PrescriptionItem).where(
@@ -69,6 +86,7 @@ def create_order_from_prescription(
         ):
             raise ValueError("Prescription contains invalid medicine details.")
 
+        # Aggregate quantities when a medicine appears more than once.
         medicine_quantities = {}
 
         for item in items:
@@ -83,9 +101,30 @@ def create_order_from_prescription(
             .order_by(Store.id)
         ).all()
 
+        # Rank stores by distance when customer coordinates are available.
+        # Stores without coordinates are placed after stores with known distances.
+        if customer_latitude is not None and customer_longitude is not None:
+            candidate_stores.sort(
+                key=lambda store: (
+                    store.latitude is None or store.longitude is None,
+                    calculate_distance_km(
+                        customer_latitude,
+                        customer_longitude,
+                        store.latitude,
+                        store.longitude,
+                    )
+                    if (
+                        store.latitude is not None
+                        and store.longitude is not None
+                    )
+                    else float("inf"),
+                )
+            )
+
         selected_store = None
         selected_inventory = None
 
+        # Select the nearest store that can fulfil the complete prescription.
         for store in candidate_stores:
             inventory_rows = db.scalars(
                 select(Inventory)
@@ -93,6 +132,7 @@ def create_order_from_prescription(
                     Inventory.store_id == store.id,
                     Inventory.medicine_id.in_(medicine_quantities.keys()),
                 )
+                .order_by(Inventory.medicine_id)
                 .with_for_update()
             ).all()
 
@@ -101,14 +141,16 @@ def create_order_from_prescription(
                 for inventory in inventory_rows
             }
 
-            if all(
+            has_all_stock = all(
                 medicine_id in inventory_by_medicine
                 and (
                     inventory_by_medicine[medicine_id].available_quantity
                     - inventory_by_medicine[medicine_id].reserved_quantity
                 ) >= quantity
                 for medicine_id, quantity in medicine_quantities.items()
-            ):
+            )
+
+            if has_all_stock:
                 selected_store = store
                 selected_inventory = inventory_by_medicine
                 break
@@ -164,6 +206,10 @@ def create_order_from_prescription(
         db.commit()
         db.refresh(order)
 
+        order_items = db.scalars(
+            select(OrderItem).where(OrderItem.order_id == order.id)
+        ).all()
+
         return {
             "id": order.id,
             "order_number": order.order_number,
@@ -180,15 +226,14 @@ def create_order_from_prescription(
                     "quantity": order_item.quantity,
                     "unit_price": order_item.unit_price,
                 }
-                for order_item in db.scalars(
-                    select(OrderItem).where(OrderItem.order_id == order.id)
-                ).all()
+                for order_item in order_items
             ],
         }
 
     except Exception:
         db.rollback()
         raise
+
 
 def get_customer_orders(db: Session, customer_id: int):
     orders = db.scalars(
@@ -218,11 +263,12 @@ def get_customer_orders(db: Session, customer_id: int):
 
     return result
 
+
 def get_customer_order(db: Session, customer_id: int, order_id: int):
     order = db.scalar(
         select(Order).where(
             Order.id == order_id,
-            Order.customer_id == customer_id
+            Order.customer_id == customer_id,
         )
     )
 
@@ -230,9 +276,7 @@ def get_customer_order(db: Session, customer_id: int, order_id: int):
         return None
 
     items = db.scalars(
-        select(OrderItem).where(
-            OrderItem.order_id == order.id
-        )
+        select(OrderItem).where(OrderItem.order_id == order.id)
     ).all()
 
     return {
@@ -246,6 +290,8 @@ def get_customer_order(db: Session, customer_id: int, order_id: int):
         "created_at": order.created_at,
         "items": items,
     }
+
+
 ORDER_STATUS_TRANSITIONS = {
     "confirmed": ["preparing", "cancelled"],
     "preparing": ["ready", "cancelled"],
@@ -254,6 +300,7 @@ ORDER_STATUS_TRANSITIONS = {
     "delivered": [],
     "cancelled": [],
 }
+
 
 def update_order_status(db, order_id, new_status, pharmacist_id):
     try:
@@ -290,7 +337,6 @@ def update_order_status(db, order_id, new_status, pharmacist_id):
                 .order_by(OrderItem.medicine_id)
             ).all()
 
-            # Aggregate quantities by medicine.
             quantities = {}
 
             for item in order_items:
@@ -348,4 +394,3 @@ def update_order_status(db, order_id, new_status, pharmacist_id):
     except Exception:
         db.rollback()
         raise
-

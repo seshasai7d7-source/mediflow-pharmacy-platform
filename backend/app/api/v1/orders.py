@@ -31,6 +31,8 @@ def create_customer_order(
             db=db,
             customer_id=current_user.id,
             prescription_id=order_data.prescription_id,
+            customer_latitude=order_data.customer_latitude,
+            customer_longitude=order_data.customer_longitude,
         )
 
     except ValueError as exc:

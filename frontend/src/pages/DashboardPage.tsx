@@ -20,7 +20,6 @@ export default function DashboardPage() {
 
   const isCustomer = user.role === "customer";
   const isPharmacist = user.role === "pharmacist";
-//   const isAdmin = user.role === "admin";
 
   const roleTitle = isCustomer
     ? "Customer Dashboard"
@@ -46,6 +45,7 @@ export default function DashboardPage() {
           title: "My Orders",
           description: "View your medicine orders and their status.",
           icon: Package,
+          link: "/orders",
         },
         {
           title: "Refill Management",
@@ -139,6 +139,7 @@ export default function DashboardPage() {
           <h2 className="text-xl font-semibold text-slate-900">
             Your workspace
           </h2>
+
           <p className="mt-1 text-sm text-slate-500">
             Available features for your account.
           </p>
@@ -152,31 +153,31 @@ export default function DashboardPage() {
                   key={item.title}
                   className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-md"
                 >
-                 <div className="grid h-11 w-11 place-items-center rounded-xl bg-emerald-50 text-emerald-700">
-                  <Icon size={22} />
-                 </div>
+                  <div className="grid h-11 w-11 place-items-center rounded-xl bg-emerald-50 text-emerald-700">
+                    <Icon size={22} />
+                  </div>
 
-                 <h3 className="mt-4 font-semibold text-slate-900">
-                  {item.title}
-                 </h3>
+                  <h3 className="mt-4 font-semibold text-slate-900">
+                    {item.title}
+                  </h3>
 
-                 <p className="mt-2 text-sm leading-6 text-slate-500">
-                  {item.description}
-                 </p>
-
-                 {item.link ? (
-                  <Link
-                    to={item.link}
-                    className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-emerald-700 hover:text-emerald-900"
-                  >
-                    Open feature →
-                  </Link>
-                ) : (
-                  <p className="mt-4 text-xs font-medium text-amber-700">
-                    Feature implementation pending
+                  <p className="mt-2 text-sm leading-6 text-slate-500">
+                    {item.description}
                   </p>
-                )}
-              </article>
+
+                  {item.link ? (
+                    <Link
+                      to={item.link}
+                      className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-emerald-700 hover:text-emerald-900"
+                    >
+                      Open feature →
+                    </Link>
+                  ) : (
+                    <p className="mt-4 text-xs font-medium text-amber-700">
+                      Feature implementation pending
+                    </p>
+                  )}
+                </article>
               );
             })}
           </div>

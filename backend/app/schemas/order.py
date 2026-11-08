@@ -8,6 +8,16 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class OrderCreate(BaseModel):
     prescription_id: int = Field(gt=0)
+    customer_latitude: float | None = Field(
+        default=None,
+        ge=-90,
+        le=90,
+    )
+    customer_longitude: float | None = Field(
+        default=None,
+        ge=-180,
+        le=180,
+    )
 
 
 class OrderItemResponse(BaseModel):
