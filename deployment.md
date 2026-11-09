@@ -1,21 +1,28 @@
 # MediFlow Pharmacy Platform
 ## Deployment Guide
 
-**Version:** 1.0  
-**Date:** November 2026
+**GitHub Repository:** https://github.com/seshasai7d7-source/mediflow-pharmacy-platform
+
+**Version:** 1.1  
+**Date:** November 2026  
+**Deployment Status:** Local development and demonstration only
+
+---
 
 ## 1. Overview
 
-This guide describes how to configure and run the MediFlow Pharmacy Platform in a local development or demonstration environment.
+This guide describes how to configure, run, and verify the MediFlow Pharmacy Platform in a local development or demonstration environment.
 
 The application consists of:
 
-- React and TypeScript frontend.
+- React 19 and TypeScript frontend.
 - FastAPI backend.
 - PostgreSQL 16 database.
-- Optional Google Gemini API integration for prescription information extraction.
+- Google Gemini API integration for AI-assisted prescription information extraction.
 
-This guide does not describe a production-ready deployment. Use synthetic data only.
+The application includes customer authentication, prescription submission, pharmacist review, order management, inventory reservation, refill plan and request workflows, and administrative functionality.
+
+This is not a production deployment. Use synthetic demonstration data only.
 
 ## 2. Prerequisites
 
@@ -41,25 +48,25 @@ git --version
 
 ## 3. Obtain the Source Code
 
-Clone the repository:
+Clone the public repository:
 
 ```powershell
 git clone https://github.com/seshasai7d7-source/mediflow-pharmacy-platform.git
 cd mediflow-pharmacy-platform
 ```
 
-If the source code is already available locally, open PowerShell in the repository root.
+If the repository is already available locally, open PowerShell in its root directory.
 
-## 4. Configure PostgreSQL
+## 4. Start PostgreSQL
 
-Start the database:
+From the repository root:
 
 ```powershell
 docker compose up -d db
 docker compose ps
 ```
 
-Wait for the database health check to report healthy.
+Wait for the PostgreSQL health check to report healthy.
 
 The supplied Docker Compose configuration uses:
 
@@ -71,11 +78,13 @@ The supplied Docker Compose configuration uses:
 | Container port | 5432 |
 | Container | mediflow-postgres |
 
-The default password is for local development only. Replace it before using the environment beyond a local demonstration.
+The Compose configuration contains a development-only default database password. It must be replaced with a strong local value before using the environment beyond a local demonstration.
+
+If you change the database credentials, keep the Compose configuration and backend `DATABASE_URL` consistent.
 
 ## 5. Configure the Backend
 
-Navigate to the backend:
+Navigate to the backend directory:
 
 ```powershell
 cd backend
@@ -101,7 +110,7 @@ Create the local environment file:
 Copy-Item .env.example .env
 ```
 
-Edit `backend/.env` and configure:
+Edit `backend/.env` and configure the following variables:
 
 | Variable | Description |
 |---|---|
@@ -123,9 +132,11 @@ For the supplied Docker Compose configuration, the database URL must use host po
 postgresql+psycopg://mediflow:YOUR_PASSWORD@localhost:5433/mediflow
 ```
 
-Replace the JWT placeholder with a strong, randomly generated secret. Never use a sample or default secret outside local development.
+Replace `YOUR_PASSWORD` with the password configured for your local database.
 
-To enable Gemini extraction, configure a valid API key. Without it, the application should be tested using the pharmacist's manual-review workflow and the configured fallback behavior.
+Generate a strong, unique JWT secret. Do not use a sample or default secret outside local development.
+
+To enable Gemini extraction, configure a valid API key. If Gemini is unavailable or extraction is incomplete, the prescription workflow must be handled through pharmacist review and the application's manual-review fallback.
 
 ## 6. Apply Database Migrations
 
@@ -135,9 +146,57 @@ With the backend virtual environment active and the terminal in the `backend` di
 alembic upgrade head
 ```
 
-This applies the database schema migrations.
+This applies the database schema migrations, including the refill-related tables.
 
-## 7. Start the Backend
+## 7. Configure Demonstration Accounts
+
+Privileged demonstration accounts are provisioned separately from public customer registration.
+
+Create or update the administrator account:
+
+```powershell
+$env:DEMO_ADMIN_EMAIL = "admin.demo@gmail.com"
+$env:DEMO_ADMIN_PASSWORD = Read-Host "Enter the demo admin password" -AsSecureString | ForEach-Object {
+    [System.Net.NetworkCredential]::new("", $_).Password
+}
+
+python .\create_admin.py
+```
+
+Create or update the pharmacist account:
+
+```powershell
+$env:DEMO_PHARMACIST_EMAIL = "pharmacist.demo@mediflow.local"
+$env:DEMO_PHARMACIST_PASSWORD = Read-Host "Enter the demo pharmacist password" -AsSecureString | ForEach-Object {
+    [System.Net.NetworkCredential]::new("", $_).Password
+}
+
+python .\create_pharmacist.py
+```
+
+Use a different strong password of at least 12 characters for each account.
+
+The scripts:
+
+- Read account credentials from environment variables.
+- Create the account if it does not exist.
+- Update the password hash if the account already exists with the expected role.
+- Reject an existing account if its role does not match.
+- Do not print passwords or access tokens.
+
+The environment variables are local to the current PowerShell session. Do not commit credentials or place real passwords in this guide.
+
+### Demonstration login identifiers
+
+| Role | Email |
+|---|---|
+| Administrator | admin.demo@gmail.com |
+| Pharmacist | pharmacist.demo@mediflow.local |
+| Customer | Register through the application |
+
+The administrator and pharmacist passwords are the values configured locally during account setup. No shared password is included in this document.
+
+## 8. Start the Backend
 
 From the `backend` directory:
 
@@ -153,7 +212,7 @@ The backend is available at:
 
 Keep this terminal running.
 
-## 8. Configure and Start the Frontend
+## 9. Configure and Start the Frontend
 
 Open another PowerShell terminal and navigate to the frontend directory:
 
@@ -173,7 +232,7 @@ Create the local environment file:
 Copy-Item .env.example .env
 ```
 
-The frontend environment variable is:
+Configure the frontend environment variable:
 
 ```text
 VITE_API_BASE_URL=http://127.0.0.1:8000
@@ -185,15 +244,15 @@ Start the frontend:
 npm run dev
 ```
 
-Open:
+Open the application:
 
 http://localhost:5173
 
-## 9. Verification
-
-Verify the following components:
+## 10. Verification
 
 ### Database
+
+From the repository root:
 
 ```powershell
 docker compose ps
@@ -225,41 +284,73 @@ http://localhost:5173
 
 Verify that the application loads and reports backend connectivity.
 
-### Authentication and workflows
+### Customer workflow
 
-Using demonstration accounts and synthetic data:
+Using synthetic data:
 
 1. Register a customer account.
-2. Sign in as a customer.
-3. Submit a synthetic prescription document.
-4. Sign in using a pharmacist demonstration account.
-5. Open the pharmacist prescription queue.
-6. Review the submitted prescription.
-7. Verify rejection behavior using an invalid synthetic prescription.
-8. Approve a suitable synthetic prescription.
-9. Open Pharmacist Order Management.
-10. Verify that the pharmacist can view customer orders.
-11. Test the supported order status transitions:
-    confirmed → preparing → ready → dispatched → delivered.
-12. Refresh the page and verify that the final order status persists.
-13. Verify that a customer cannot access the pharmacist Order Management page.
-14. Test cancellation of an eligible order and verify that reserved inventory is released.
+2. Sign in as the customer.
+3. Browse the medicine inventory.
+4. Submit a synthetic prescription document.
+5. View the prescription status.
+6. View available order information.
+7. Create and manage a refill plan using an eligible approved prescription.
+
+### Pharmacist workflow
+
+1. Sign in using the pharmacist demonstration account.
+2. Open the prescription review queue.
+3. Inspect a submitted synthetic prescription.
+4. Review the extracted medicine information.
+5. Test the manual-review fallback where applicable.
+6. Reject an invalid synthetic prescription.
+7. Approve a suitable synthetic prescription.
+8. Open Pharmacist Order Management.
+9. Verify supported order status transitions:
+
+   `confirmed → preparing → ready → dispatched → delivered`
+
+10. Refresh the page and verify that the order status persists.
+11. Review pending refill plans and refill requests.
 
 Do not approve invalid synthetic prescriptions.
 
-## 10. Run Automated Tests
+### Administrator workflow
 
-From the backend directory with the virtual environment active:
+1. Sign in using the administrator demonstration account.
+2. Open the administrative overview.
+3. Review user and store information.
+4. Verify available operational counts and status information.
+5. Test supported user and store management operations.
+
+### Authorization
+
+Verify that:
+
+- Customers cannot access pharmacist-only operations.
+- Customers cannot access administrator-only operations.
+- Pharmacist accounts cannot access administrator-only operations.
+- Public registration creates customer accounts only.
+
+## 11. Run Automated Tests
+
+From the `backend` directory with the virtual environment active:
 
 ```powershell
 python -m pytest -q
 ```
 
-A successful test run should report all tests passing.
+Latest development verification:
 
-## 11. Build the Frontend
+```text
+170 passed
+```
 
-From the frontend directory:
+The test suite uses isolated test database configuration and mocked external AI behavior where appropriate.
+
+## 12. Build the Frontend
+
+From the `frontend` directory:
 
 ```powershell
 npm run build
@@ -271,11 +362,13 @@ Vite generates the production frontend assets in:
 frontend/dist/
 ```
 
-## 12. Shutdown
+Latest development verification completed successfully.
+
+## 13. Shutdown
 
 Stop the frontend and backend using `Ctrl + C` in their respective terminals.
 
-Stop the PostgreSQL container from the repository root:
+Stop PostgreSQL from the repository root:
 
 ```powershell
 docker compose down
@@ -289,7 +382,7 @@ docker compose down -v
 
 **Warning:** Removing the volume permanently deletes the local PostgreSQL database and its stored data.
 
-## 13. Security and Deployment Notes
+## 14. Security and Deployment Notes
 
 - Do not commit `.env` files or API credentials.
 - Use strong, unique secrets.
@@ -298,15 +391,22 @@ docker compose down -v
 - Restrict access to uploaded prescription documents.
 - Use managed secrets and secure database credentials.
 - Configure backups, monitoring, and access logging.
-- Perform appropriate privacy, security, and regulatory reviews before any real pharmacy use.
+- Perform appropriate privacy, security, and regulatory reviews before real pharmacy use.
+- Rotate demonstration credentials before any deployment beyond local evaluation.
 
-## 14. Known Limitations
+## 15. Known Limitations
 
 This deployment is intended for development and demonstration purposes.
 
 - Payment gateway integration is not implemented.
 - Medicine pricing is not configured as a complete business pricing catalogue.
 - AI extraction requires pharmacist review.
+- Refill requests require explicit customer and pharmacist/admin actions; automated reminders and recurring orders are not implemented.
+- OTP authentication, family profiles, and multilingual interfaces are not implemented.
 - Production hosting, monitoring, backup automation, and regulatory validation are not included.
 
-Do not process real prescriptions or customer data using this demonstration deployment.
+**Do not process real prescriptions or customer data using this demonstration deployment.**
+
+---
+
+**End of Deployment Guide**

@@ -1,3 +1,4 @@
+import os
 
 from sqlalchemy import select
 
@@ -6,8 +7,16 @@ from app.db.database import SessionLocal
 from app.models import User
 
 
-EMAIL = "admin.demo@gmail.com"
-PASSWORD = "AdminDemo#2026"
+EMAIL = os.getenv("DEMO_ADMIN_EMAIL", "").strip().lower()
+PASSWORD = os.getenv("DEMO_ADMIN_PASSWORD", "")
+
+if not EMAIL or not PASSWORD:
+    raise SystemExit(
+        "Set DEMO_ADMIN_EMAIL and DEMO_ADMIN_PASSWORD before running this script."
+    )
+
+if len(PASSWORD) < 12:
+    raise SystemExit("The demo admin password must be at least 12 characters.")
 
 db = SessionLocal()
 
@@ -17,7 +26,12 @@ try:
     )
 
     if existing_user:
-        print("Demo admin already exists.")
+        if existing_user.role != "admin":
+            raise ValueError("The configured email belongs to a non-admin account.")
+        existing_user.password_hash = hash_password(PASSWORD)
+        db.commit()
+
+        print("Admin account password updated sucessfully.")
         print("Email:", EMAIL)
     else:
         admin = User(
@@ -31,9 +45,12 @@ try:
         db.add(admin)
         db.commit()
 
-        print("Demo admin created successfully.")
+        print("Admin account created successfully.")
         print("Email:", EMAIL)
-        print("Role: admin")
+
+except Exception:
+    db.rollback()
+    raise
 
 finally:
     db.close()

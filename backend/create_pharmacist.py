@@ -1,50 +1,60 @@
+import os
 
 from sqlalchemy import select
 
-from app.core.security import hash_password, create_access_token
-from app.db.database import get_db
+from app.core.security import hash_password
+from app.db.database import SessionLocal
 from app.models import User
 
-PHARMACIST_EMAIL = "pharmacist.demo@mediflow.local"
-PHARMACIST_PASSWORD = "PharmacistDemo#2026"
 
-db_generator = get_db()
-db = next(db_generator)
+EMAIL = os.getenv("DEMO_PHARMACIST_EMAIL", "").strip().lower()
+PASSWORD = os.getenv("DEMO_PHARMACIST_PASSWORD", "")
+
+if not EMAIL or not PASSWORD:
+    raise SystemExit(
+        "Set DEMO_PHARMACIST_EMAIL and DEMO_PHARMACIST_PASSWORD before running this script."
+    )
+
+if len(PASSWORD) < 12:
+    raise SystemExit("The demo pharmacist password must be at least 12 characters.")
+
+db = SessionLocal()
 
 try:
     pharmacist = db.scalar(
-        select(User).where(User.email == PHARMACIST_EMAIL)
+        select(User).where(User.email == EMAIL)
     )
 
-    if pharmacist is None:
+    if pharmacist:
+        if pharmacist.role != "pharmacist":
+            raise ValueError(
+                "The configured email belongs to a non-pharmacist account."
+            )
+
+        pharmacist.password_hash = hash_password(PASSWORD)
+        db.commit()
+
+        print("Pharmacist account password updated successfully.")
+        print("Email:", EMAIL)
+
+    else:
         pharmacist = User(
             full_name="Demo Pharmacist",
-            email=PHARMACIST_EMAIL,
-            password_hash=hash_password(PHARMACIST_PASSWORD),
+            email=EMAIL,
+            password_hash=hash_password(PASSWORD),
             role="pharmacist",
             is_active=True,
         )
 
         db.add(pharmacist)
         db.commit()
-        db.refresh(pharmacist)
 
         print("Pharmacist account created successfully.")
+        print("Email:", EMAIL)
 
-    elif pharmacist.role != "pharmacist":
-        raise ValueError(
-            "This email already belongs to a non-pharmacist account."
-        )
-    else:
-        print("Pharmacist account already exists.")
-
-    token = create_access_token(pharmacist.id)
-
-    print("Email:", pharmacist.email)
-    print("Role:", pharmacist.role)
-    print("Password:", PHARMACIST_PASSWORD)
-    print("Access token:", token)
+except Exception:
+    db.rollback()
+    raise
 
 finally:
     db.close()
-    db_generator.close()
