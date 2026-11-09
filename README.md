@@ -19,6 +19,9 @@ The application demonstrates customer registration and authentication, medicine 
 - Review and edit medicine details before making a decision.
 - Approve or reject prescriptions with a review decision.
 - Manage order status through supported workflow transitions.
+- View all pharmacy orders in the Order Management page.
+- Update orders through confirmed, preparing, ready, dispatched, and delivered statuses.
+- Cancel eligible orders according to backend workflow rules.
 
 ### Backend and business rules
 - Role-based access for customers, pharmacists, and administrators.
@@ -68,6 +71,7 @@ mediflow-pharmacy-platform/
 ├── README.md
 ├── TDD.md
 └── deployment.md
+```
 
 ## Local Setup
 
@@ -141,6 +145,9 @@ From the backend directory with its virtual environment activated:
 ```powershell
 python -m pytest -q
 ```
+Latest verified backend test result: **140 passed, 1 warning**.
+
+The frontend production build was also verified successfully using `npm run build`.
 
 ## Production Frontend Build
 

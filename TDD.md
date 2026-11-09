@@ -588,13 +588,12 @@ Frontend validation includes a TypeScript production build using `npm run build`
 
 
 
-- Backend automated tests: \*\*137 passed\*\*.
+- Backend automated tests: **140 passed, 1 warning**.
+- Frontend production build: **successful**.
+- Pharmacist Order Management: manually verified, including all supported order status transitions and persistence after refresh.
+- Role-based access: customer access to pharmacist order management is blocked.
 
-- Frontend production build: \*\*successful\*\*.
-
-
-
-These results describe the latest recorded verification during development. Re-run both checks against the final submission before delivery.
+The backend warning is non-blocking and should be reviewed separately. These results reflect the latest development verification.
 
 
 

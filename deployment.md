@@ -236,7 +236,14 @@ Using demonstration accounts and synthetic data:
 5. Open the pharmacist prescription queue.
 6. Review the submitted prescription.
 7. Verify rejection behavior using an invalid synthetic prescription.
-8. Verify order and inventory workflows using suitable test data.
+8. Approve a suitable synthetic prescription.
+9. Open Pharmacist Order Management.
+10. Verify that the pharmacist can view customer orders.
+11. Test the supported order status transitions:
+    confirmed → preparing → ready → dispatched → delivered.
+12. Refresh the page and verify that the final order status persists.
+13. Verify that a customer cannot access the pharmacist Order Management page.
+14. Test cancellation of an eligible order and verify that reserved inventory is released.
 
 Do not approve invalid synthetic prescriptions.
 

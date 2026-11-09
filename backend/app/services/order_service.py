@@ -264,6 +264,35 @@ def get_customer_orders(db: Session, customer_id: int):
     return result
 
 
+def get_all_orders(db: Session):
+    """Return all pharmacy orders for pharmacist/admin management."""
+
+    orders = db.scalars(
+        select(Order).order_by(Order.created_at.desc())
+    ).all()
+
+    result = []
+
+    for order in orders:
+        items = db.scalars(
+            select(OrderItem).where(OrderItem.order_id == order.id)
+        ).all()
+
+        result.append({
+            "id": order.id,
+            "order_number": order.order_number,
+            "customer_id": order.customer_id,
+            "store_id": order.store_id,
+            "prescription_id": order.prescription_id,
+            "status": order.status,
+            "total_amount": order.total_amount,
+            "created_at": order.created_at,
+            "items": items,
+        })
+
+    return result
+
+
 def get_customer_order(db: Session, customer_id: int, order_id: int):
     order = db.scalar(
         select(Order).where(

@@ -65,6 +65,7 @@ export default function DashboardPage() {
             title: "Order Management",
             description: "Review and manage pharmacy orders.",
             icon: Package,
+            link: "/pharmacist/orders",
           },
           {
             title: "Verification",

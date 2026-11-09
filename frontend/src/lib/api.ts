@@ -177,8 +177,6 @@ export const prescriptionApi = {
   },
 };
 
-
-
 export interface PharmacistQueueItem {
   id: number;
   customer_id: number;
@@ -271,6 +269,7 @@ export const pharmacistApi = {
     );
   },
 };
+
 export interface OrderItemResponse {
   id: number;
   medicine_id: number;
@@ -278,24 +277,34 @@ export interface OrderItemResponse {
   unit_price: number;
 }
 
+export type OrderStatus =
+  | "pending_review"
+  | "confirmed"
+  | "preparing"
+  | "ready"
+  | "dispatched"
+  | "delivered"
+  | "cancelled";
+
+export type OrderStatusUpdate =
+  | "preparing"
+  | "ready"
+  | "dispatched"
+  | "delivered"
+  | "cancelled";
+
 export interface OrderResponse {
   id: number;
   order_number: string;
   customer_id: number;
   store_id: number | null;
   prescription_id: number | null;
-  status:
-    | "pending_review"
-    | "confirmed"
-    | "preparing"
-    | "ready"
-    | "dispatched"
-    | "delivered"
-    | "cancelled";
+  status: OrderStatus;
   total_amount: number;
   created_at: string;
   items: OrderItemResponse[];
 }
+
 export interface OrderCreatePayload {
   prescription_id: number;
   customer_latitude?: number;
@@ -318,5 +327,19 @@ export const orderApi = {
 
   async getOrder(orderId: number): Promise<OrderResponse> {
     return request<OrderResponse>(`/orders/${orderId}`);
+  },
+
+  async getAllOrders(): Promise<OrderResponse[]> {
+    return request<OrderResponse[]>("/orders/manage");
+  },
+
+  async updateOrderStatus(
+    orderId: number,
+    newStatus: OrderStatusUpdate,
+  ): Promise<OrderResponse> {
+    return request<OrderResponse>(`/orders/${orderId}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status: newStatus }),
+    });
   },
 };

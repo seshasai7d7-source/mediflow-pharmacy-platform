@@ -56,9 +56,20 @@ def promote_user_to_role(email, role):
 
 
 def get_pharmacist_token(client, email, phone):
-    token = register_customer(client, email, phone)
+    register_customer(client, email, phone)
     promote_user_to_role(email, "pharmacist")
-    return token
+
+    login_response = client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": email,
+            "password": "TestPassword#2026",
+        },
+    )
+
+    assert login_response.status_code == 200
+
+    return login_response.json()["access_token"]
 
 
 def create_test_order(customer_id):
@@ -405,3 +416,56 @@ def test_update_order_status_rejects_invalid_status(client):
     )
 
     assert response.status_code == 422
+
+def test_pharmacist_can_view_all_orders(client):
+    customer_token = register_customer(
+        client,
+        "manage_customer@example.com",
+        "9876500010",
+    )
+
+    customer_response = client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {customer_token}"},
+    )
+    customer_id = customer_response.json()["id"]
+
+    order_id = create_test_order(customer_id)
+
+    pharmacist_token = get_pharmacist_token(
+        client,
+        "manage_pharmacist@example.com",
+        "9876500011",
+    )
+
+    response = client.get(
+        "/api/v1/orders/manage",
+        headers={"Authorization": f"Bearer {pharmacist_token}"},
+    )
+
+    assert response.status_code == 200
+    orders = response.json()
+    assert len(orders) == 1
+    assert orders[0]["id"] == order_id
+    assert len(orders[0]["items"]) == 1
+
+
+def test_customer_cannot_view_all_orders(client):
+    customer_token = register_customer(
+        client,
+        "manage_denied@example.com",
+        "9876500012",
+    )
+
+    response = client.get(
+        "/api/v1/orders/manage",
+        headers={"Authorization": f"Bearer {customer_token}"},
+    )
+
+    assert response.status_code == 403
+
+
+def test_view_all_orders_requires_authentication(client):
+    response = client.get("/api/v1/orders/manage")
+
+    assert response.status_code == 401
