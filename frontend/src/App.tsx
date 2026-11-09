@@ -24,6 +24,11 @@ import MyOrdersPage from "./pages/MyOrdersPage";
 import PharmacistQueuePage from "./pages/PharmacistQueuePage";
 import PharmacistReviewPage from "./pages/PharmacistReviewPage";
 import OrderManagementPage from "./pages/OrderManagementPage";
+import CustomerRefillsPage from "./pages/CustomerRefillsPage";
+import PharmacistRefillsPage from "./pages/PharmacistRefillsPage";
+import AdminOverviewPage from "./pages/admin/AdminOverviewPage";
+import AdminUsersPage from "./pages/admin/AdminUsersPage";
+import AdminStoresPage from "./pages/admin/AdminStoresPage";
 
 const API_BASE_URL = (
   import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000"
@@ -203,23 +208,24 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
 
+      {/* Routes available to authenticated users */}
       <Route element={<ProtectedRoute />}>
         <Route path="/dashboard" element={<DashboardPage />} />
-        <Route
-          path="/prescriptions"
-          element={<MyPrescriptionsPage />}
-        />
-        <Route
-          path="/orders"
-          element={<MyOrdersPage />}
-        />
+        <Route path="/prescriptions" element={<MyPrescriptionsPage />} />
+        <Route path="/orders" element={<MyOrdersPage />} />
+        <Route path="/refills" element={<CustomerRefillsPage />} />
+      </Route>
+
+      {/* Routes restricted to pharmacists and administrators */}
+      <Route
+        element={
+          <ProtectedRoute allowedRoles={["pharmacist", "admin"]} />
+        }
+      >
         <Route
           path="/pharmacist/orders"
           element={<OrderManagementPage />}
         />
-      </Route>
-
-      <Route element={<ProtectedRoute allowedRoles={["pharmacist"]} />}>
         <Route
           path="/pharmacist/prescriptions"
           element={<PharmacistQueuePage />}
@@ -227,6 +233,26 @@ export default function App() {
         <Route
           path="/pharmacist/prescriptions/:id"
           element={<PharmacistReviewPage />}
+        />
+        <Route
+          path="/pharmacist/refills"
+          element={<PharmacistRefillsPage />}
+        />
+      </Route>
+
+      {/* Administrator-only routes */}
+      <Route element={<ProtectedRoute allowedRoles={["admin"]} />}>
+        <Route
+          path="/admin/overview"
+          element={<AdminOverviewPage />}
+        />
+        <Route
+          path="/admin/users"
+          element={<AdminUsersPage />}
+        />
+        <Route
+          path="/admin/stores"
+          element={<AdminStoresPage />}
         />
       </Route>
 

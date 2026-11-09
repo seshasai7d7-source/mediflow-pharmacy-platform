@@ -1,4 +1,3 @@
-
 from decimal import Decimal
 from uuid import uuid4
 
@@ -23,8 +22,19 @@ def create_order_from_prescription(
     prescription_id: int,
     customer_latitude: float | None = None,
     customer_longitude: float | None = None,
+    *,
+    is_refill_order: bool = False,
+    commit: bool = True,
 ) -> dict:
-    """Create an order using approved items from the nearest eligible store."""
+    """Create an order using approved items from an eligible store.
+
+    Normal orders retain duplicate-order protection.
+
+    Refill orders may bypass that restriction only when the caller has
+    independently validated an approved refill request.
+
+    Set commit=False when this function is part of a larger transaction.
+    """
 
     try:
         # Validate coordinates when supplied.
@@ -61,7 +71,9 @@ def create_order_from_prescription(
             )
         )
 
-        if existing_order:
+        # Normal orders cannot duplicate an active prescription order.
+        # The refill workflow may bypass this after validating its request.
+        if existing_order is not None and not is_refill_order:
             raise ValueError(
                 "An active order already exists for this prescription."
             )
@@ -203,8 +215,11 @@ def create_order_from_prescription(
                 )
             )
 
-        db.commit()
-        db.refresh(order)
+        # Commit only when this function owns the transaction.
+        # Refill approval will use commit=False and commit everything together.
+        if commit:
+            db.commit()
+            db.refresh(order)
 
         order_items = db.scalars(
             select(OrderItem).where(OrderItem.order_id == order.id)

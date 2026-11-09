@@ -30,7 +30,7 @@ export default function DashboardPage() {
   const description = isCustomer
     ? "Manage your prescriptions and medicine refills in one place."
     : isPharmacist
-      ? "Review prescriptions and manage customer orders."
+      ? "Review prescriptions, refill requests, and customer orders."
       : "Monitor and manage the MediFlow pharmacy platform.";
 
   const dashboardItems = isCustomer
@@ -49,8 +49,10 @@ export default function DashboardPage() {
         },
         {
           title: "Refill Management",
-          description: "Manage your recurring medicine refills.",
+          description:
+            "Create refill plans, track their approval, and request medicine refills.",
           icon: Activity,
+          link: "/refills",
         },
       ]
     : isPharmacist
@@ -68,9 +70,11 @@ export default function DashboardPage() {
             link: "/pharmacist/orders",
           },
           {
-            title: "Verification",
-            description: "Verify medicines and prescription details.",
-            icon: ShieldCheck,
+            title: "Refill Review",
+            description:
+              "Review refill plans and approve or reject refill requests.",
+            icon: Activity,
+            link: "/pharmacist/refills",
           },
         ]
       : [
@@ -78,16 +82,26 @@ export default function DashboardPage() {
             title: "User Management",
             description: "Manage customer and staff accounts.",
             icon: Users,
+            link: "/admin/users",
           },
           {
             title: "Store Management",
-            description: "Manage pharmacy store information.",
+            description: "View and manage pharmacy store information.",
             icon: Package,
+            link: "/admin/stores",
           },
           {
             title: "Platform Overview",
             description: "Monitor platform activity and operations.",
             icon: Activity,
+            link: "/admin/overview",
+          },
+          {
+            title: "Refill Review",
+            description:
+              "Review and manage pending customer refill requests.",
+            icon: ShieldCheck,
+            link: "/pharmacist/refills",
           },
         ];
 
@@ -166,18 +180,12 @@ export default function DashboardPage() {
                     {item.description}
                   </p>
 
-                  {item.link ? (
-                    <Link
-                      to={item.link}
-                      className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-emerald-700 hover:text-emerald-900"
-                    >
-                      Open feature →
-                    </Link>
-                  ) : (
-                    <p className="mt-4 text-xs font-medium text-amber-700">
-                      Feature implementation pending
-                    </p>
-                  )}
+                  <Link
+                    to={item.link}
+                    className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-emerald-700 hover:text-emerald-900"
+                  >
+                    Open feature →
+                  </Link>
                 </article>
               );
             })}

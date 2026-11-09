@@ -262,3 +262,73 @@ class AuditLog(TimestampMixin, Base):
     entity_id: Mapped[int | None] = mapped_column(Integer)
     details: Mapped[dict | None] = mapped_column(JSON)
     ip_address: Mapped[str | None] = mapped_column(String(45))
+
+
+class RefillPlan(TimestampMixin, Base):
+    __tablename__ = "refill_plans"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    customer_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id"), nullable=False
+    )
+    prescription_id: Mapped[int] = mapped_column(
+        ForeignKey("prescriptions.id"), nullable=False
+    )
+    interval_days: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(30), default="pending_review", nullable=False
+    )
+    next_refill_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    reviewed_by: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    review_note: Mapped[str | None] = mapped_column(Text)
+
+    __table_args__ = (
+        CheckConstraint(
+            "interval_days BETWEEN 1 AND 365",
+            name="ck_refill_plans_interval",
+        ),
+        CheckConstraint(
+            "status IN "
+            "('pending_review', 'active', 'paused', 'rejected', 'cancelled')",
+            name="ck_refill_plans_status",
+        ),
+        Index("ix_refill_plans_customer_status", "customer_id", "status"),
+    )
+
+
+class RefillRequest(TimestampMixin, Base):
+    __tablename__ = "refill_requests"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    plan_id: Mapped[int] = mapped_column(
+        ForeignKey("refill_plans.id"), nullable=False
+    )
+    status: Mapped[str] = mapped_column(
+        String(30), default="pending_review", nullable=False
+    )
+    reviewed_by: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    review_note: Mapped[str | None] = mapped_column(Text)
+    order_id: Mapped[int | None] = mapped_column(
+        ForeignKey("orders.id"), nullable=True
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN "
+            "('pending_review', 'approved', 'rejected', 'cancelled')",
+            name="ck_refill_requests_status",
+        ),
+        Index("ix_refill_requests_plan_status", "plan_id", "status"),
+    )

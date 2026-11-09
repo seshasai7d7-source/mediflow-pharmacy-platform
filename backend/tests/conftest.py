@@ -10,6 +10,7 @@ if str(BACKEND_DIR) not in sys.path:
 # Configure test environment before importing the application.
 os.environ["DATABASE_URL"] = "sqlite+pysqlite://"
 os.environ["JWT_SECRET_KEY"] = "test-only-secret-key-for-mediflow"
+os.environ["GEMINI_API_KEY"] = "test-only-gemini-key"
 os.environ["JWT_ALGORITHM"] = "HS256"
 os.environ["ACCESS_TOKEN_EXPIRE_MINUTES"] = "30"
 os.environ["FRONTEND_ORIGINS"] = "http://localhost:5173"

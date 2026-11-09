@@ -343,3 +343,260 @@ export const orderApi = {
     });
   },
 };
+
+
+export interface AdminUserListResponse {
+  users: User[];
+  total: number;
+}
+
+export interface AdminUserUpdatePayload {
+  role?: UserRole;
+  is_active?: boolean;
+}
+
+export interface AdminStore {
+  id: number;
+  name: string;
+  address: string;
+  city: string;
+  pincode: string;
+  latitude: number | null;
+  longitude: number | null;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface AdminStoreListResponse {
+  stores: AdminStore[];
+  total: number;
+}
+
+export interface AdminStoreUpdatePayload {
+  name?: string;
+  address?: string;
+  city?: string;
+  pincode?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  is_active?: boolean;
+}
+
+export interface AdminPlatformOverview {
+  users: Record<string, number>;
+  stores: Record<string, number>;
+  orders: Record<string, number>;
+  prescriptions: Record<string, number>;
+  inventory: Record<string, number>;
+}
+
+export const adminApi = {
+  async getUsers(params: {
+    search?: string;
+    role?: UserRole;
+    is_active?: boolean;
+    skip?: number;
+    limit?: number;
+  } = {}): Promise<AdminUserListResponse> {
+    const query = new URLSearchParams();
+
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== "") {
+        query.set(key, String(value));
+      }
+    });
+
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return request<AdminUserListResponse>(`/admin/users${suffix}`);
+  },
+
+  async updateUser(
+    userId: number,
+    payload: AdminUserUpdatePayload,
+  ): Promise<User> {
+    return request<User>(`/admin/users/${userId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async getStores(params: {
+    search?: string;
+    is_active?: boolean;
+    skip?: number;
+    limit?: number;
+  } = {}): Promise<AdminStoreListResponse> {
+    const query = new URLSearchParams();
+
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== "") {
+        query.set(key, String(value));
+      }
+    });
+
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return request<AdminStoreListResponse>(`/admin/stores${suffix}`);
+  },
+
+  async getStore(storeId: number): Promise<AdminStore> {
+    return request<AdminStore>(`/admin/stores/${storeId}`);
+  },
+
+  async updateStore(
+    storeId: number,
+    payload: AdminStoreUpdatePayload,
+  ): Promise<AdminStore> {
+    return request<AdminStore>(`/admin/stores/${storeId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async getOverview(): Promise<AdminPlatformOverview> {
+    return request<AdminPlatformOverview>("/admin/overview");
+  },
+};
+
+
+export type RefillPlanStatus =
+  | "pending_review"
+  | "active"
+  | "paused"
+  | "rejected"
+  | "cancelled";
+
+export type RefillRequestStatus =
+  | "pending_review"
+  | "approved"
+  | "rejected"
+  | "cancelled";
+
+export interface RefillPlan {
+  id: number;
+  customer_id: number;
+  prescription_id: number;
+  interval_days: number;
+  status: RefillPlanStatus;
+  next_refill_at: string | null;
+  reviewed_by: number | null;
+  reviewed_at: string | null;
+  review_note: string | null;
+  created_at: string;
+}
+
+export interface RefillRequest {
+  id: number;
+  plan_id: number;
+  status: RefillRequestStatus;
+  reviewed_by: number | null;
+  reviewed_at: string | null;
+  review_note: string | null;
+  order_id: number | null;
+  created_at: string;
+}
+
+export interface RefillPlanCreatePayload {
+  prescription_id: number;
+  interval_days: number;
+}
+
+export interface RefillReviewPayload {
+  decision: "approved" | "rejected";
+  review_note?: string;
+}
+
+export interface RefillRequestReviewResponse {
+  refill_request: RefillRequest;
+  order: {
+    id: number;
+    status: string;
+    [key: string]: unknown;
+  } | null;
+}
+
+export const refillApi = {
+  // Customer: create a refill plan.
+  async createPlan(
+    payload: RefillPlanCreatePayload,
+  ): Promise<RefillPlan> {
+    return request<RefillPlan>("/refills/plans", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  // Customer: view personal refill plans.
+  async getMyPlans(): Promise<RefillPlan[]> {
+    return request<RefillPlan[]>("/refills/plans/my");
+  },
+
+  // Customer: pause, resume, or cancel a refill plan.
+  async updatePlanStatus(
+    planId: number,
+    newStatus: "paused" | "active" | "cancelled",
+  ): Promise<RefillPlan> {
+    const query = new URLSearchParams({
+      new_status: newStatus,
+    });
+
+    return request<RefillPlan>(
+      `/refills/plans/${planId}/status?${query.toString()}`,
+      {
+        method: "PATCH",
+      },
+    );
+  },
+
+  // Pharmacist/admin: view plans awaiting review.
+  async getPlanQueue(): Promise<RefillPlan[]> {
+    return request<RefillPlan[]>("/refills/plans/queue");
+  },
+
+  // Pharmacist/admin: approve or reject a refill plan.
+  async reviewPlan(
+    planId: number,
+    payload: RefillReviewPayload,
+  ): Promise<RefillPlan> {
+    return request<RefillPlan>(
+      `/refills/plans/${planId}/review`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      },
+    );
+  },
+
+  // Customer: request a refill when the plan is due.
+  async createRequest(planId: number): Promise<RefillRequest> {
+    return request<RefillRequest>(
+      `/refills/plans/${planId}/requests`,
+      {
+        method: "POST",
+      },
+    );
+  },
+
+  // Customer: view personal refill requests.
+  async getMyRequests(): Promise<RefillRequest[]> {
+    return request<RefillRequest[]>("/refills/requests/my");
+  },
+
+  // Pharmacist/admin: view requests awaiting review.
+  async getRequestQueue(): Promise<RefillRequest[]> {
+    return request<RefillRequest[]>("/refills/requests/queue");
+  },
+
+  // Pharmacist/admin: approve or reject a refill request.
+  async reviewRequest(
+    requestId: number,
+    payload: RefillReviewPayload,
+  ): Promise<RefillRequestReviewResponse> {
+    return request<RefillRequestReviewResponse>(
+      `/refills/requests/${requestId}/review`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      },
+    );
+  },
+};
