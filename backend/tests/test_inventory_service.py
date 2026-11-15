@@ -1,4 +1,6 @@
 import pytest
+from sqlalchemy.orm import Session
+from sqlalchemy import select
 from app.services.inventory_service import (
     calculate_distance_km,
     find_available_stores,
@@ -184,6 +186,115 @@ def test_import_inventory_csv_skips_invalid_rows(client):
     finally:
         db_generator.close()
 
+
+def test_import_inventory_csv_skips_inactive_store_or_medicine(client):
+    db_generator = app.dependency_overrides[get_db]()
+    db = next(db_generator)
+
+    try:
+        inactive_store = Store(
+            name="Inactive Import Store",
+            address="Test Address",
+            city="Kolkata",
+            pincode="700001",
+            is_active=False,
+        )
+        active_store = Store(
+            name="Active Import Store",
+            address="Test Address",
+            city="Kolkata",
+            pincode="700002",
+            is_active=True,
+        )
+        medicine = Medicine(
+            name="Import Medicine",
+            strength="500mg",
+            dosage_form="tablet",
+            schedule_category="OTC",
+            requires_prescription=False,
+            is_active=True,
+        )
+        inactive_medicine = Medicine(
+            name="Inactive Import Medicine",
+            strength="500mg",
+            dosage_form="tablet",
+            schedule_category="OTC",
+            requires_prescription=False,
+            is_active=False,
+        )
+        db.add_all([inactive_store, active_store, medicine, inactive_medicine])
+        db.commit()
+
+        result = import_inventory_csv(
+            db,
+            (
+                "store_id,medicine_id,available_quantity\n"
+                f"{inactive_store.id},{medicine.id},10\n"
+                f"{active_store.id},{inactive_medicine.id},10\n"
+                f"{active_store.id},{medicine.id},25\n"
+            ).encode("utf-8"),
+        )
+
+        assert result["records_processed"] == 3
+        assert result["records_created"] == 1
+        assert result["records_skipped"] == 2
+        assert db.scalar(
+            select(Inventory).where(
+                Inventory.store_id == active_store.id,
+                Inventory.medicine_id == medicine.id,
+            )
+        ).available_quantity == 25
+    finally:
+        db_generator.close()
+
+
+def test_import_inventory_csv_rolls_back_when_commit_fails(client, monkeypatch):
+    db_generator = app.dependency_overrides[get_db]()
+    db = next(db_generator)
+
+    try:
+        store = Store(
+            name="Rollback Import Store",
+            address="Test Address",
+            city="Kolkata",
+            pincode="700003",
+            is_active=True,
+        )
+        medicine = Medicine(
+            name="Rollback Import Medicine",
+            strength="500mg",
+            dosage_form="tablet",
+            schedule_category="OTC",
+            requires_prescription=False,
+            is_active=True,
+        )
+        db.add_all([store, medicine])
+        db.commit()
+        original_commit = Session.commit
+
+        def fail_commit(self):
+            raise RuntimeError("simulated import commit failure")
+
+        monkeypatch.setattr(Session, "commit", fail_commit)
+        with pytest.raises(RuntimeError, match="simulated import commit failure"):
+            import_inventory_csv(
+                db,
+                (
+                    "store_id,medicine_id,available_quantity\n"
+                    f"{store.id},{medicine.id},15\n"
+                ).encode("utf-8"),
+            )
+        monkeypatch.setattr(Session, "commit", original_commit)
+
+        assert db.scalar(
+            select(Inventory).where(
+                Inventory.store_id == store.id,
+                Inventory.medicine_id == medicine.id,
+            )
+        ) is None
+    finally:
+        db_generator.close()
+
 def test_find_available_stores_returns_store_with_sufficient_stock(client):
     db_generator = app.dependency_overrides[get_db]()
     db = next(db_generator)
@@ -281,6 +392,88 @@ def test_find_available_stores_excludes_insufficient_stock(client):
 
         assert results == []
 
+    finally:
+        db_generator.close()
+
+
+@pytest.mark.parametrize("medicine_id", [999999])
+def test_find_available_stores_rejects_missing_medicine(client, medicine_id):
+    db_generator = app.dependency_overrides[get_db]()
+    db = next(db_generator)
+
+    try:
+        with pytest.raises(ValueError, match="Medicine not found or inactive"):
+            find_available_stores(db, medicine_id=medicine_id, quantity=1)
+    finally:
+        db_generator.close()
+
+
+def test_find_available_stores_sorts_by_distance_when_coordinates_are_given(
+    client,
+):
+    db_generator = app.dependency_overrides[get_db]()
+    db = next(db_generator)
+
+    try:
+        medicine = Medicine(
+            name="Distance Medicine",
+            strength="500mg",
+            dosage_form="tablet",
+            schedule_category="OTC",
+            requires_prescription=False,
+            is_active=True,
+        )
+        far_store = Store(
+            name="Far Distance Store",
+            address="Far Address",
+            city="Kolkata",
+            pincode="700004",
+            latitude=23.0,
+            longitude=89.0,
+            is_active=True,
+        )
+        near_store = Store(
+            name="Near Distance Store",
+            address="Near Address",
+            city="Kolkata",
+            pincode="700005",
+            latitude=22.57,
+            longitude=88.36,
+            is_active=True,
+        )
+        db.add_all([medicine, far_store, near_store])
+        db.flush()
+        db.add_all(
+            [
+                Inventory(
+                    store_id=far_store.id,
+                    medicine_id=medicine.id,
+                    available_quantity=20,
+                    reserved_quantity=0,
+                ),
+                Inventory(
+                    store_id=near_store.id,
+                    medicine_id=medicine.id,
+                    available_quantity=20,
+                    reserved_quantity=0,
+                ),
+            ]
+        )
+        db.commit()
+
+        results = find_available_stores(
+            db,
+            medicine.id,
+            5,
+            customer_latitude=22.5726,
+            customer_longitude=88.3639,
+        )
+
+        assert [result["store_id"] for result in results] == [
+            near_store.id,
+            far_store.id,
+        ]
+        assert results[0]["distance_km"] <= results[1]["distance_km"]
     finally:
         db_generator.close()
 
@@ -403,6 +596,17 @@ def test_reserve_inventory_rejects_insufficient_stock(client):
         assert inventory.available_quantity == 20
         assert inventory.reserved_quantity == 5
 
+    finally:
+        db_generator.close()
+
+
+def test_reserve_inventory_rejects_missing_inventory_record(client):
+    db_generator = app.dependency_overrides[get_db]()
+    db = next(db_generator)
+
+    try:
+        with pytest.raises(ValueError, match="Inventory record not found"):
+            reserve_inventory(db, store_id=999, medicine_id=999, quantity=1)
     finally:
         db_generator.close()
 

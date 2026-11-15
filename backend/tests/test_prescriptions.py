@@ -7,7 +7,12 @@ from fastapi import HTTPException, UploadFile
 from starlette.datastructures import Headers
 from PIL import Image
 from pypdf import PdfWriter
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
+import app.api.v1.prescriptions as prescriptions_api
+from app.db.database import get_db
+from app.models import Prescription
 from app.schemas.prescription_extraction import PrescriptionExtraction
 from app.services import prescription_storage as storage
 
@@ -90,6 +95,122 @@ def test_customer_can_upload_pdf(client):
     assert response.status_code == 201
     assert response.json()["status"] == "uploaded"
     assert response.json()["original_filename"] == "test_prescription.pdf"
+    assert response.json()["ai_extraction_json"]["needs_manual_review"] is True
+    assert response.json()["ai_extraction_json"]["medicines"][0][
+        "medicine_name"
+    ] == "Test Medicine"
+
+    db_generator = client.app.dependency_overrides[get_db]()
+    db = next(db_generator)
+    try:
+        prescription = db.get(Prescription, response.json()["id"])
+        assert prescription.status == "uploaded"
+        assert prescription.ai_extraction_json["needs_manual_review"] is True
+        assert prescription.file_object_key.startswith("prescriptions/")
+    finally:
+        db.close()
+        db_generator.close()
+
+
+def test_upload_rejects_empty_file_at_api_boundary(client):
+    token = register_and_login(client)
+
+    response = client.post(
+        "/api/v1/prescriptions/upload",
+        headers={"Authorization": f"Bearer {token}"},
+        files={
+            "file": (
+                "empty.pdf",
+                BytesIO(b""),
+                "application/pdf",
+            )
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Uploaded file is empty."
+
+
+def test_gemini_failure_preserves_upload_for_manual_review(client, monkeypatch):
+    token = register_and_login(client)
+
+    def fail_extraction(file_bytes, mime_type):
+        raise RuntimeError("Gemini unavailable")
+
+    monkeypatch.setattr(
+        prescriptions_api,
+        "extract_prescription",
+        fail_extraction,
+    )
+
+    response = client.post(
+        "/api/v1/prescriptions/upload",
+        headers={"Authorization": f"Bearer {token}"},
+        files={
+            "file": (
+                "manual_review.pdf",
+                create_test_pdf(),
+                "application/pdf",
+            )
+        },
+    )
+
+    assert response.status_code == 201
+    extraction = response.json()["ai_extraction_json"]
+    assert extraction["medicines"] == []
+    assert extraction["needs_manual_review"] is True
+    assert "AI extraction unavailable" in extraction["extraction_notes"]
+
+    db_generator = client.app.dependency_overrides[get_db]()
+    db = next(db_generator)
+    try:
+        prescription = db.get(Prescription, response.json()["id"])
+        assert prescription.status == "uploaded"
+        assert prescription.ai_extraction_json == extraction
+    finally:
+        db.close()
+        db_generator.close()
+
+
+def test_upload_database_failure_rolls_back_and_removes_saved_file(
+    client, monkeypatch, tmp_path
+):
+    token = register_and_login(client)
+    monkeypatch.setattr(storage, "STORAGE_DIR", tmp_path)
+    monkeypatch.setattr(prescriptions_api, "STORAGE_DIR", tmp_path)
+
+    original_commit = Session.commit
+
+    def fail_commit(self):
+        raise RuntimeError("simulated database failure")
+
+    monkeypatch.setattr(Session, "commit", fail_commit)
+
+    response = client.post(
+        "/api/v1/prescriptions/upload",
+        headers={"Authorization": f"Bearer {token}"},
+        files={
+            "file": (
+                "database_failure.pdf",
+                create_test_pdf(),
+                "application/pdf",
+            )
+        },
+    )
+
+    monkeypatch.setattr(Session, "commit", original_commit)
+
+    assert response.status_code == 500
+    assert response.json()["detail"] == "Unable to save prescription record."
+    assert list(tmp_path.iterdir()) == []
+
+    db_generator = client.app.dependency_overrides[get_db]()
+    db = next(db_generator)
+    try:
+        assert db.scalars(select(Prescription)).all() == []
+    finally:
+        db.close()
+        db_generator.close()
 
 
 def test_upload_requires_authentication(client):

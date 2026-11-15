@@ -145,7 +145,7 @@ From the backend directory with its virtual environment activated:
 ```powershell
 python -m pytest -q
 ```
-Latest verified backend test result: **140 passed, 1 warning**.
+Latest verified backend test result: **214 passed, 1 warning**; backend coverage: **98%**.
 
 The frontend production build was also verified successfully using `npm run build`.
 

@@ -374,6 +374,63 @@ def test_route_to_available_store_not_found(monkeypatch):
     assert exc.value.detail == "Medicine not found."
 
 
+def test_route_to_available_store_passes_customer_coordinates(monkeypatch):
+    expected_stores = [{"store_id": 2, "distance_km": 1.25}]
+
+    def mock_find_stores(
+        db,
+        medicine_id,
+        quantity,
+        customer_latitude,
+        customer_longitude,
+    ):
+        assert medicine_id == 1
+        assert quantity == 5
+        assert customer_latitude == 22.5
+        assert customer_longitude == 88.3
+        return expected_stores
+
+    monkeypatch.setattr(
+        inventory_api,
+        "find_available_stores",
+        mock_find_stores,
+    )
+
+    result = inventory_api.route_to_available_store(
+        request=SimpleNamespace(
+            medicine_id=1,
+            quantity=5,
+            customer_latitude=22.5,
+            customer_longitude=88.3,
+        ),
+        db=None,
+        current_user=SimpleNamespace(id=1),
+    )
+
+    assert result == expected_stores
+
+
+def test_route_to_available_store_maps_generic_validation_error(monkeypatch):
+    def mock_find_stores(*args, **kwargs):
+        raise ValueError("Requested quantity must be greater than zero.")
+
+    monkeypatch.setattr(
+        inventory_api,
+        "find_available_stores",
+        mock_find_stores,
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        inventory_api.route_to_available_store(
+            request=SimpleNamespace(medicine_id=1, quantity=0),
+            db=None,
+            current_user=SimpleNamespace(id=1),
+        )
+
+    assert exc.value.status_code == 400
+    assert exc.value.detail == "Requested quantity must be greater than zero."
+
+
 # ---------------------------------------------------------
 # Inventory reservation API tests
 # ---------------------------------------------------------

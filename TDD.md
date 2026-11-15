@@ -397,7 +397,7 @@ Frontend validation uses the TypeScript production build through `npm run build`
 
 | Verification | Result |
 |---|---|
-| Backend automated tests | **170 passed** |
+| Backend automated tests | **214 passed; 98% coverage** |
 | Admin account script syntax | Passed |
 | Pharmacist account script syntax | Passed |
 | Frontend production build | Successful |

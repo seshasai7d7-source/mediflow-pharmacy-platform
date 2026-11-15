@@ -2,7 +2,7 @@ import pytest
 from decimal import Decimal
 from app.db.database import get_db
 from app.main import app
-from app.models import Inventory, Medicine, Order, OrderItem, Store, User
+from app.models import AuditLog, Inventory, Medicine, Order, OrderItem, Store, User
 from app.services.order_service import update_order_status
 
 def create_test_order(client):
@@ -178,6 +178,42 @@ def test_pharmacist_can_cancel_order_and_release_stock(client):
 
     assert available == 100
     assert reserved == 0
+
+
+def test_cancellation_persists_status_stock_release_and_audit(client):
+    data = create_test_order(client)
+    pharmacist_token = create_pharmacist_token(client)
+
+    response = client.patch(
+        f"/api/v1/orders/{data['order_id']}/status",
+        json={"status": "cancelled"},
+        headers={"Authorization": f"Bearer {pharmacist_token}"},
+    )
+    assert response.status_code == 200
+
+    db_generator = app.dependency_overrides[get_db]()
+    db = next(db_generator)
+    try:
+        order = db.get(Order, data["order_id"])
+        inventory = db.query(Inventory).filter_by(
+            medicine_id=data["medicine_id"],
+            store_id=data["store_id"],
+        ).one()
+        audit = db.query(AuditLog).filter_by(
+            entity_type="order",
+            entity_id=data["order_id"],
+            action="order.status_updated",
+        ).one()
+
+        assert order.status == "cancelled"
+        assert inventory.reserved_quantity == 0
+        assert audit.details["old_status"] == "confirmed"
+        assert audit.details["new_status"] == "cancelled"
+        assert audit.details["released_inventory"] == [
+            {"medicine_id": data["medicine_id"], "quantity": 5}
+        ]
+    finally:
+        db_generator.close()
 
 
 def test_customer_cannot_update_order_status(client):

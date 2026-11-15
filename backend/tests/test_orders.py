@@ -14,6 +14,7 @@ from app.models import (
     Prescription,
     PrescriptionItem,
     Store,
+    User,
 )
 from app.services.order_service import (
     create_order_from_prescription,
@@ -828,5 +829,121 @@ def test_create_order_rejects_stock_changed_during_creation(client):
             == 0
         )
 
+    finally:
+        db_generator.close()
+
+
+@pytest.mark.parametrize(
+    ("latitude", "longitude", "message"),
+    [
+        (22.5, None, "Both customer latitude and longitude must be provided together."),
+        (91, 88.3, "Customer latitude must be between -90 and 90."),
+        (22.5, 181, "Customer longitude must be between -180 and 180."),
+    ],
+)
+def test_create_order_rejects_invalid_customer_coordinates(
+    client, latitude, longitude, message
+):
+    db_generator = app.dependency_overrides[get_db]()
+    db = next(db_generator)
+
+    try:
+        with pytest.raises(ValueError, match=message):
+            create_order_from_prescription(
+                db=db,
+                customer_id=1,
+                prescription_id=1,
+                customer_latitude=latitude,
+                customer_longitude=longitude,
+            )
+    finally:
+        db_generator.close()
+
+
+def test_order_uses_only_one_complete_store_for_fulfillment(client):
+    db_generator = app.dependency_overrides[get_db]()
+    db = next(db_generator)
+
+    try:
+        customer = User(
+            full_name="Multi-store Customer",
+            email="multi-store@example.com",
+            password_hash="test-password-hash",
+            role="customer",
+            is_active=True,
+        )
+        medicine = Medicine(
+            name="Multi-store Medicine",
+            strength="500mg",
+            dosage_form="tablet",
+            schedule_category="H",
+            requires_prescription=True,
+            is_active=True,
+        )
+        nearer_store = Store(
+            name="Near Pharmacy",
+            address="Near Address",
+            city="Kolkata",
+            pincode="700001",
+            latitude=22.5726,
+            longitude=88.3639,
+            is_active=True,
+        )
+        farther_store = Store(
+            name="Far Pharmacy",
+            address="Far Address",
+            city="Kolkata",
+            pincode="700002",
+            latitude=22.7,
+            longitude=88.6,
+            is_active=True,
+        )
+        db.add_all([customer, medicine, nearer_store, farther_store])
+        db.flush()
+
+        prescription = Prescription(
+            customer_id=customer.id,
+            file_object_key="test/multi-store.pdf",
+            status="approved",
+        )
+        db.add(prescription)
+        db.flush()
+        db.add(
+            PrescriptionItem(
+                prescription_id=prescription.id,
+                medicine_id=medicine.id,
+                extracted_name=medicine.name,
+                quantity=5,
+                pharmacist_approved=True,
+            )
+        )
+        near_inventory = Inventory(
+            store_id=nearer_store.id,
+            medicine_id=medicine.id,
+            available_quantity=4,
+            reserved_quantity=0,
+        )
+        far_inventory = Inventory(
+            store_id=farther_store.id,
+            medicine_id=medicine.id,
+            available_quantity=10,
+            reserved_quantity=0,
+        )
+        db.add_all([near_inventory, far_inventory])
+        db.commit()
+
+        result = create_order_from_prescription(
+            db=db,
+            customer_id=customer.id,
+            prescription_id=prescription.id,
+            customer_latitude=22.5726,
+            customer_longitude=88.3639,
+        )
+
+        db.refresh(near_inventory)
+        db.refresh(far_inventory)
+        assert result["store_id"] == farther_store.id
+        assert near_inventory.reserved_quantity == 0
+        assert far_inventory.reserved_quantity == 5
     finally:
         db_generator.close()

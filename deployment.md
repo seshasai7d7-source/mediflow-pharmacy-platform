@@ -343,7 +343,7 @@ python -m pytest -q
 Latest development verification:
 
 ```text
-170 passed
+214 passed; 98% coverage
 ```
 
 The test suite uses isolated test database configuration and mocked external AI behavior where appropriate.
