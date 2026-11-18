@@ -67,10 +67,16 @@ def import_inventory_csv(
                     select(Inventory).where(
                         Inventory.store_id == store_id,
                         Inventory.medicine_id == medicine_id,
-                    )
+                    ).with_for_update()
                 )
 
                 if inventory:
+                    if quantity < inventory.reserved_quantity:
+                        raise ValueError(
+                            "Available quantity cannot be less than reserved "
+                            f"quantity for store {store_id} and medicine "
+                            f"{medicine_id}."
+                        )
                     inventory.available_quantity = quantity
                     updated += 1
                 else:
@@ -83,7 +89,13 @@ def import_inventory_csv(
                     db.add(inventory)
                     created += 1
 
-            except (ValueError, TypeError, KeyError):
+            except ValueError as exc:
+                if str(exc).startswith(
+                    "Available quantity cannot be less than reserved quantity"
+                ):
+                    raise
+                skipped += 1
+            except (TypeError, KeyError):
                 skipped += 1
 
         db.commit()

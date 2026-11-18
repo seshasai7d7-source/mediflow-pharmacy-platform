@@ -126,6 +126,10 @@ class Inventory(TimestampMixin, Base):
             "available_quantity >= 0 AND reserved_quantity >= 0",
             name="ck_inventory_quantities",
         ),
+        CheckConstraint(
+            "reserved_quantity <= available_quantity",
+            name="ck_inventory_reserved_lte_available",
+        ),
     )
 
 

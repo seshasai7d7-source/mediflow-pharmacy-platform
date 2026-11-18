@@ -216,6 +216,35 @@ def test_cancellation_persists_status_stock_release_and_audit(client):
         db_generator.close()
 
 
+def test_repeated_cancellation_does_not_release_stock_twice(client):
+    data = create_test_order(client)
+    pharmacist_token = create_pharmacist_token(client)
+    endpoint = f"/api/v1/orders/{data['order_id']}/status"
+    headers = {"Authorization": f"Bearer {pharmacist_token}"}
+
+    first_response = client.patch(
+        endpoint,
+        json={"status": "cancelled"},
+        headers=headers,
+    )
+    second_response = client.patch(
+        endpoint,
+        json={"status": "cancelled"},
+        headers=headers,
+    )
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 409
+    assert "Cannot change order status" in second_response.json()["detail"]
+
+    available, reserved = get_inventory_values(
+        data["medicine_id"],
+        data["store_id"],
+    )
+    assert available == 100
+    assert reserved == 0
+
+
 def test_customer_cannot_update_order_status(client):
     data = create_test_order(client)
 

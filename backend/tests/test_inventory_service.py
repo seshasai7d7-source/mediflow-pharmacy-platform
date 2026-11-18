@@ -1,4 +1,5 @@
 import pytest
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 from app.services.inventory_service import (
@@ -163,6 +164,160 @@ def test_import_inventory_csv_updates_existing_record(client):
     finally:
         db_generator.close()
 
+
+@pytest.mark.parametrize("available_quantity", [5, 12])
+def test_import_inventory_csv_allows_available_at_or_above_reserved(
+    client,
+    available_quantity,
+):
+    db_generator = app.dependency_overrides[get_db]()
+    db = next(db_generator)
+
+    try:
+        store = Store(
+            name="Reserved Stock Import Store",
+            address="Test Address",
+            city="Kolkata",
+            pincode="700017",
+            is_active=True,
+        )
+        medicine = Medicine(
+            name="Reserved Stock Import Medicine",
+            strength="500mg",
+            dosage_form="tablet",
+            schedule_category="OTC",
+            requires_prescription=False,
+            is_active=True,
+        )
+        db.add_all([store, medicine])
+        db.flush()
+        inventory = Inventory(
+            store_id=store.id,
+            medicine_id=medicine.id,
+            available_quantity=10,
+            reserved_quantity=5,
+        )
+        db.add(inventory)
+        db.commit()
+
+        result = import_inventory_csv(
+            db,
+            (
+                "store_id,medicine_id,available_quantity\n"
+                f"{store.id},{medicine.id},{available_quantity}\n"
+            ).encode(),
+        )
+
+        db.refresh(inventory)
+        assert result["records_updated"] == 1
+        assert inventory.available_quantity == available_quantity
+        assert inventory.reserved_quantity == 5
+    finally:
+        db_generator.close()
+
+
+def test_import_inventory_csv_rejects_below_reserved_and_rolls_back_batch(client):
+    db_generator = app.dependency_overrides[get_db]()
+    db = next(db_generator)
+
+    try:
+        store = Store(
+            name="Atomic Import Store",
+            address="Test Address",
+            city="Kolkata",
+            pincode="700018",
+            is_active=True,
+        )
+        first_medicine = Medicine(
+            name="Atomic Import Medicine One",
+            strength="500mg",
+            dosage_form="tablet",
+            schedule_category="OTC",
+            requires_prescription=False,
+            is_active=True,
+        )
+        second_medicine = Medicine(
+            name="Atomic Import Medicine Two",
+            strength="250mg",
+            dosage_form="tablet",
+            schedule_category="OTC",
+            requires_prescription=False,
+            is_active=True,
+        )
+        db.add_all([store, first_medicine, second_medicine])
+        db.flush()
+        first_inventory = Inventory(
+            store_id=store.id,
+            medicine_id=first_medicine.id,
+            available_quantity=20,
+            reserved_quantity=4,
+        )
+        second_inventory = Inventory(
+            store_id=store.id,
+            medicine_id=second_medicine.id,
+            available_quantity=20,
+            reserved_quantity=6,
+        )
+        db.add_all([first_inventory, second_inventory])
+        db.commit()
+
+        with pytest.raises(ValueError, match="less than reserved quantity"):
+            import_inventory_csv(
+                db,
+                (
+                    "store_id,medicine_id,available_quantity\n"
+                    f"{store.id},{first_medicine.id},30\n"
+                    f"{store.id},{second_medicine.id},5\n"
+                ).encode(),
+            )
+
+        db.refresh(first_inventory)
+        db.refresh(second_inventory)
+        assert first_inventory.available_quantity == 20
+        assert first_inventory.reserved_quantity == 4
+        assert second_inventory.available_quantity == 20
+        assert second_inventory.reserved_quantity == 6
+    finally:
+        db_generator.close()
+
+
+def test_inventory_constraint_rejects_reserved_quantity_above_available(client):
+    db_generator = app.dependency_overrides[get_db]()
+    db = next(db_generator)
+
+    try:
+        store = Store(
+            name="Constraint Test Store",
+            address="Test Address",
+            city="Kolkata",
+            pincode="700019",
+            is_active=True,
+        )
+        medicine = Medicine(
+            name="Constraint Test Medicine",
+            strength="500mg",
+            dosage_form="tablet",
+            schedule_category="OTC",
+            requires_prescription=False,
+            is_active=True,
+        )
+        db.add_all([store, medicine])
+        db.flush()
+        db.add(
+            Inventory(
+                store_id=store.id,
+                medicine_id=medicine.id,
+                available_quantity=4,
+                reserved_quantity=5,
+            )
+        )
+
+        with pytest.raises(IntegrityError):
+            db.commit()
+        db.rollback()
+    finally:
+        db_generator.close()
+
 def test_import_inventory_csv_skips_invalid_rows(client):
     db_generator = app.dependency_overrides[get_db]()
     db = next(db_generator)
@@ -174,14 +329,15 @@ def test_import_inventory_csv_skips_invalid_rows(client):
             "1,xyz,50\n"
             "1,1,-10\n"
             "0,1,50\n"
+            "1,1\n"
         ).encode("utf-8")
 
         result = import_inventory_csv(db, csv_content)
 
-        assert result["records_processed"] == 4
+        assert result["records_processed"] == 5
         assert result["records_created"] == 0
         assert result["records_updated"] == 0
-        assert result["records_skipped"] == 4
+        assert result["records_skipped"] == 5
 
     finally:
         db_generator.close()
