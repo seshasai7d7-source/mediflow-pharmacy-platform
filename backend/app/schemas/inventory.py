@@ -65,3 +65,32 @@ class StoreRoutingResult(BaseModel):
     city: str
     available_quantity: int
     distance_km: float | None = None
+
+
+class CatalogueStoreAvailability(BaseModel):
+    store_id: int
+    store_name: str
+    city: str
+    available_quantity: int
+    is_available: bool
+
+
+class MedicineCatalogueItem(BaseModel):
+    id: int
+    name: str
+    generic_name: str | None
+    brand_name: str | None
+    strength: str | None
+    dosage_form: str | None
+    schedule_category: str
+    requires_prescription: bool
+    available_quantity: int
+    is_available: bool
+    stores: list[CatalogueStoreAvailability]
+
+
+class MedicineCatalogueResponse(BaseModel):
+    items: list[MedicineCatalogueItem]
+    total: int
+    skip: int
+    limit: int

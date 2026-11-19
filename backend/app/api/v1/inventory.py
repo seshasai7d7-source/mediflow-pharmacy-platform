@@ -1,11 +1,16 @@
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
-from app.schemas.inventory import StoreRoutingRequest, StoreRoutingResult
+from app.schemas.inventory import (
+    MedicineCatalogueResponse,
+    StoreRoutingRequest,
+    StoreRoutingResult,
+)
 from app.services.inventory_service import find_available_stores
 from app.core.dependencies import require_roles
 from app.db.database import get_db
-from app.models import User
+from app.models import Inventory, Medicine, Store, User
 from app.schemas.inventory import InventoryImportResponse
 from app.services.inventory_service import import_inventory_csv
 from app.services.inventory_service import reserve_inventory
@@ -13,6 +18,122 @@ from app.services.inventory_service import reserve_inventory
 router = APIRouter(prefix="/inventory", tags=["Inventory"])
 
 MAX_CSV_SIZE = 5 * 1024 * 1024
+
+
+@router.get(
+    "/catalogue",
+    response_model=MedicineCatalogueResponse,
+)
+def browse_medicine_catalogue(
+    search: str | None = Query(default=None, max_length=200),
+    store_id: int | None = Query(default=None, gt=0),
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("customer")),
+):
+    if store_id is not None:
+        store = db.scalar(
+            select(Store).where(
+                Store.id == store_id,
+                Store.is_active.is_(True),
+            )
+        )
+        if store is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Store not found or inactive.",
+            )
+
+    filters = [Medicine.is_active.is_(True)]
+    if search:
+        pattern = f"%{search.strip()}%"
+        filters.append(
+            func.lower(Medicine.name).like(func.lower(pattern))
+            | func.lower(func.coalesce(Medicine.generic_name, "")).like(
+                func.lower(pattern)
+            )
+            | func.lower(func.coalesce(Medicine.brand_name, "")).like(
+                func.lower(pattern)
+            )
+        )
+
+    count = db.scalar(
+        select(func.count(Medicine.id)).where(*filters)
+    ) or 0
+
+    medicines = db.scalars(
+        select(Medicine)
+        .where(*filters)
+        .order_by(Medicine.name.asc(), Medicine.id.asc())
+        .offset(skip)
+        .limit(limit)
+    ).all()
+
+    medicine_ids = [medicine.id for medicine in medicines]
+    availability_query = (
+        select(Inventory, Store)
+        .join(Store, Inventory.store_id == Store.id)
+        .where(
+            Inventory.medicine_id.in_(medicine_ids),
+            Store.is_active.is_(True),
+        )
+    )
+    if store_id is not None:
+        availability_query = availability_query.where(Store.id == store_id)
+
+    availability_rows = db.execute(availability_query).all()
+    availability: dict[int, list[dict]] = {
+        medicine.id: [] for medicine in medicines
+    }
+    for inventory, store in availability_rows:
+        unreserved = (
+            inventory.available_quantity - inventory.reserved_quantity
+        )
+        availability[inventory.medicine_id].append({
+            "store_id": store.id,
+            "store_name": store.name,
+            "city": store.city,
+            "available_quantity": max(unreserved, 0),
+            "is_available": unreserved > 0,
+        })
+
+    items = []
+    for medicine in medicines:
+        stores = availability[medicine.id]
+        if store_id is not None and not stores:
+            stores = [{
+                "store_id": store_id,
+                "store_name": store.name,
+                "city": store.city,
+                "available_quantity": 0,
+                "is_available": False,
+            }]
+
+        total_available = sum(
+            store_availability["available_quantity"]
+            for store_availability in stores
+        )
+        items.append({
+            "id": medicine.id,
+            "name": medicine.name,
+            "generic_name": medicine.generic_name,
+            "brand_name": medicine.brand_name,
+            "strength": medicine.strength,
+            "dosage_form": medicine.dosage_form,
+            "schedule_category": medicine.schedule_category,
+            "requires_prescription": medicine.requires_prescription,
+            "available_quantity": total_available,
+            "is_available": total_available > 0,
+            "stores": stores,
+        })
+
+    return {
+        "items": items,
+        "total": count,
+        "skip": skip,
+        "limit": limit,
+    }
 
 
 @router.post(

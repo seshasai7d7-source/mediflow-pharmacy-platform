@@ -138,6 +138,21 @@ Open http://localhost:5173.
 
 The frontend API URL is configured through `VITE_API_BASE_URL`.
 
+### Customer catalogue API
+
+Authenticated customers can browse active medicines through:
+
+- `GET /api/v1/inventory/catalogue`
+- Query parameters: `search`, `store_id`, `skip`, and `limit`
+- `search` matches medicine name, generic name, or brand name.
+- `store_id` filters availability to one active store.
+- `skip` defaults to `0`; `limit` defaults to `20` and is capped at `100`.
+
+The response contains medicine metadata, prescription requirements, and
+store-level unreserved availability. It does not expose inventory identifiers,
+reserved quantities, suppliers, pricing, or procurement details. Catalogue
+browsing is read-only and requires the `customer` role.
+
 ## Running Tests
 
 From the backend directory with its virtual environment activated:

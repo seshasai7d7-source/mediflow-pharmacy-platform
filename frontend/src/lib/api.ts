@@ -458,6 +458,62 @@ export const adminApi = {
 };
 
 
+export interface CatalogueStoreAvailability {
+  store_id: number;
+  store_name: string;
+  city: string;
+  available_quantity: number;
+  is_available: boolean;
+}
+
+export interface MedicineCatalogueItem {
+  id: number;
+  name: string;
+  generic_name: string | null;
+  brand_name: string | null;
+  strength: string | null;
+  dosage_form: string | null;
+  schedule_category: string;
+  requires_prescription: boolean;
+  available_quantity: number;
+  is_available: boolean;
+  stores: CatalogueStoreAvailability[];
+}
+
+export interface MedicineCatalogueResponse {
+  items: MedicineCatalogueItem[];
+  total: number;
+  skip: number;
+  limit: number;
+}
+
+export const storeApi = {
+  async getStores(): Promise<AdminStore[]> {
+    return request<AdminStore[]>("/stores");
+  },
+};
+
+export const inventoryApi = {
+  async getCatalogue(params: {
+    search?: string;
+    store_id?: number;
+    skip?: number;
+    limit?: number;
+  } = {}): Promise<MedicineCatalogueResponse> {
+    const query = new URLSearchParams();
+
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== "") {
+        query.set(key, String(value));
+      }
+    });
+
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return request<MedicineCatalogueResponse>(`/inventory/catalogue${suffix}`);
+  },
+};
+
+
 export type RefillPlanStatus =
   | "pending_review"
   | "active"

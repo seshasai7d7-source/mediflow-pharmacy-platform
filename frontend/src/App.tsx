@@ -29,6 +29,7 @@ import PharmacistRefillsPage from "./pages/PharmacistRefillsPage";
 import AdminOverviewPage from "./pages/admin/AdminOverviewPage";
 import AdminUsersPage from "./pages/admin/AdminUsersPage";
 import AdminStoresPage from "./pages/admin/AdminStoresPage";
+import MedicineCataloguePage from "./pages/MedicineCataloguePage";
 
 const API_BASE_URL = (
   import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000"
@@ -214,6 +215,7 @@ export default function App() {
         <Route path="/prescriptions" element={<MyPrescriptionsPage />} />
         <Route path="/orders" element={<MyOrdersPage />} />
         <Route path="/refills" element={<CustomerRefillsPage />} />
+        <Route path="/catalogue" element={<MedicineCataloguePage />} />
       </Route>
 
       {/* Routes restricted to pharmacists and administrators */}

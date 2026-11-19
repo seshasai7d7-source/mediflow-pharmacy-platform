@@ -48,6 +48,12 @@ export default function DashboardPage() {
           link: "/orders",
         },
         {
+          title: "Medicine Catalogue",
+          description: "Search medicines and check availability at active stores.",
+          icon: Package,
+          link: "/catalogue",
+        },
+        {
           title: "Refill Management",
           description:
             "Create refill plans, track their approval, and request medicine refills.",
